@@ -2,6 +2,7 @@ use binread::{derive_binread, BinRead, BinReaderExt, NullString, io::{self, Seek
 use binread::file_ptr::{FilePtr, IntoSeekFrom};
 use core::fmt;
 
+/// Top-level view of a GCM file
 #[derive(BinRead, Debug)]
 #[br(big)]
 struct GcmTop (
@@ -10,25 +11,27 @@ struct GcmTop (
     pub GcmFile,
 );
 
+/// A 6-character ID for a game
 #[derive(BinRead)]
-struct GameId(pub [u8; 6]);
+pub struct GameId(pub [u8; 6]);
 
+/// A parsed GCM/ISO file
 #[derive_binread]
 #[derive(Debug)]
 #[br(magic = 0xc2339f3d_u32)]
 pub struct GcmFile {
     #[br(seek_before = SeekFrom::Start(0))]
-    game_id: GameId,
-    disc_number: u8,
-    revision: u8,
+    pub game_id: GameId,
+    pub disc_number: u8,
+    pub revision: u8,
     
     #[br(seek_before = SeekFrom::Start(0x20))]
     #[br(map = NullString::into_string)]
-    internal_name: String,
+    pub internal_name: String,
 
     // just gonna skip debug stuff
     #[br(seek_before = SeekFrom::Start(0x420))]
-    dol_offset: u32,
+    pub dol_offset: u32,
     
     fs_offset: u32,
     fs_size: u32,
@@ -36,36 +39,39 @@ pub struct GcmFile {
     
     #[br(seek_before = SeekFrom::Start(fs_offset as u64))]
     #[br(args(fs_offset, fs_size))]
-    filesystem: FileSystem,
+    pub filesystem: FileSystem,
 }
 
+/// The parsed GCM filesystem
 #[derive(BinRead, Debug)]
 #[br(import(offset: u32, size: u32))]
-struct FileSystem {
-    root: RootNode,
+pub struct FileSystem {
+    pub root: RootNode,
 
     #[br(args(
         offset as u64, // root offset
         (offset + (root.total_node_count * FsNode::SIZE)) as u64 // name offset (after all entries)
     ))]
     #[br(count = root.total_node_count - 1)]
-    files: Vec<FsNode>,
+    pub files: Vec<FsNode>,
 }
 
+/// The root node of the filesystem, under which all the other nodes fall
 #[derive(BinRead, Debug)]
 #[br(magic = 1u8)]
-struct RootNode {
+pub struct RootNode {
     #[br(map = U24::into)]
-    root_start_index: u32,
-    name_offset: u32,
-    total_node_count: u32,
+    pub name_offset: u32,
+    pub node_start_index: u32,
+    pub total_node_count: u32,
 }
 
 type FilePtr24<T> = FilePtr<U24, T>;
 
+/// A given parsed node in the filesystem
 #[br(import(root_offset: u64, name_offset: u64))]
 #[derive(BinRead, Debug)]
-enum FsNode {
+pub enum FsNode {
     #[br(magic = 0u8)]
     File {
         #[br(offset = name_offset)]
@@ -82,8 +88,8 @@ enum FsNode {
         #[br(parse_with = FilePtr24::parse)]
         #[br(map = NullString::into_string)]
         name: String,
-        dir_start_index: u32,
-        child_count: u32,
+        parent_index: u32,
+        end_index: u32,
     },
 }
 
@@ -116,24 +122,14 @@ impl fmt::Debug for GameId {
 }
 
 mod error;
+mod dir_listing;
 pub use error::GcmError;
+pub use dir_listing::*;
 
 impl GcmFile {
     pub fn from_reader<R>(reader: &mut R) -> Result<Self, GcmError>
         where R: io::Read + io::Seek,
     {
         Ok(reader.read_be::<GcmTop>()?.0)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::fs::File;
-    use super::*;
-
-    #[test]
-    fn try_parse() {
-        let file = GcmFile::from_reader(&mut File::open("/home/jam/dev/melee/melee.iso").unwrap()).unwrap();
-        dbg!(file);
     }
 }
