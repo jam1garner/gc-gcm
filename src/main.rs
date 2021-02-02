@@ -15,6 +15,9 @@ enum Args {
 
         #[structopt(help = "Path to folder to extract root of ISO to. Will be created if missing")]
         to: PathBuf,
+
+        #[structopt(long, help = "Run the extraction single threaded. Recommended for HDDs and other physical media.")]
+        single_thread: bool
     },
 
     #[structopt(about = "List the file tree of the given GCM ISO")]
@@ -61,7 +64,7 @@ fn extract_entry<'a>(entry: DirEntry<'a>, path: &Path, files: &mut Vec<(PathBuf,
     }
 }
 
-fn extract(path: PathBuf, to: &Path) {
+fn extract(path: PathBuf, to: &Path, single_thread: bool) {
     let file = std::fs::File::open(&path).unwrap();
     let mmap = unsafe { Mmap::map(&file).unwrap() };
     let mut cursor = binread::io::Cursor::new(&mmap[..]);
@@ -74,25 +77,30 @@ fn extract(path: PathBuf, to: &Path) {
 
     let iso = &mmap[..];
 
-    files.par_iter()
-        .for_each(|(path, file)| {
-            let start = file.offset as usize;
-            let end = start + (file.size as usize);
-            let file = &iso[start..end];
-            
-            if let Err(err) = fs::write(path, file) {
-                println!("Path: {}", path.display());
-                println!("Error: {:?}", err);
-                println!();
-            }
-        });
+    let extract_file = |(path, file): &(PathBuf, File)| {
+        let start = file.offset as usize;
+        let end = start + (file.size as usize);
+        let file = &iso[start..end];
+        
+        if let Err(err) = fs::write(path, file) {
+            println!("Path: {}", path.display());
+            println!("Error: {:?}", err);
+            println!();
+        }
+    };
+
+    if single_thread {
+        files.iter().for_each(extract_file);
+    } else {
+        files.par_iter().for_each(extract_file);
+    }
 }
 
 fn main() {
     let args = Args::from_args();
 
     match args {
-        Args::Extract { iso, to } => extract(iso, &to),
+        Args::Extract { iso, to, single_thread } => extract(iso, &to, single_thread),
         Args::Tree { iso } => tree(iso),
         Args::Explain => println!("{}", include_str!("explain.txt"))
     }
