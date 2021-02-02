@@ -22,6 +22,7 @@ impl FileSystem {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct DirEntry<'a> {
     node: &'a FsNode,
     files: &'a [FsNode],
@@ -99,6 +100,7 @@ impl<'a> DirEntry<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct File {
     pub offset: u32,
     pub size: u32

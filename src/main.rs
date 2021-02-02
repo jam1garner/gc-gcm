@@ -1,20 +1,33 @@
+use memmap::Mmap;
+use rayon::prelude::*;
 use structopt::StructOpt;
-use std::path::PathBuf;
+use gc_gcm::{GcmFile, DirEntry, File};
 
-use gc_gcm::{GcmFile, DirEntry};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(StructOpt)]
 enum Args {
+    #[structopt(about = "Extract a GCM ISO to a given folder")]
     Extract {
+        #[structopt(help = "Path to ISO to extract")]
+        iso: PathBuf,
+
+        #[structopt(help = "Path to folder to extract root of ISO to. Will be created if missing")]
+        to: PathBuf,
+    },
+
+    #[structopt(about = "List the file tree of the given GCM ISO")]
+    Tree {
+        #[structopt(help = "Path to ISO to list")]
         iso: PathBuf,
     },
 
-    List {
-        iso: PathBuf,
-    },
+    #[structopt(about = "Give a brief explanation about the GCM format")]
+    Explain,
 }
 
-fn list_entry<'a>(entry: DirEntry<'a>, depth: usize) {
+fn list_recursive<'a>(entry: DirEntry<'a>, depth: usize) {
     for _ in 0..depth {
         print!("    ");
     }
@@ -23,24 +36,64 @@ fn list_entry<'a>(entry: DirEntry<'a>, depth: usize) {
 
     if let Some(entries) = entry.iter_dir() {
         for child in entries {
-            list_entry(child, depth + 1)
+            list_recursive(child, depth + 1)
         }
     }
 }
 
-fn list(path: PathBuf) {
+fn tree(path: PathBuf) {
     let iso = GcmFile::from_reader(&mut std::fs::File::open(&path).unwrap()).unwrap();
 
     for entry in iso.filesystem.iter_root() {
-        list_entry(entry, 1)
+        list_recursive(entry, 1)
     }
+}
+
+fn extract_entry<'a>(entry: DirEntry<'a>, path: &Path, files: &mut Vec<(PathBuf, File)>) {
+    if let Some(file_data) = entry.as_file() {
+        files.push((path.join(entry.entry_name()), file_data));
+    } else if let Some(entries) = entry.iter_dir() {
+        let dir_path = path.join(entry.entry_name());
+        let _ = fs::create_dir_all(&dir_path);
+        for child in entries {
+            extract_entry(child, &dir_path, files)
+        }
+    }
+}
+
+fn extract(path: PathBuf, to: &Path) {
+    let file = std::fs::File::open(&path).unwrap();
+    let mmap = unsafe { Mmap::map(&file).unwrap() };
+    let mut cursor = binread::io::Cursor::new(&mmap[..]);
+    let iso = GcmFile::from_reader(&mut cursor).unwrap();
+
+    let mut files = Vec::new();
+    for entry in iso.filesystem.iter_root() {
+        extract_entry(entry, to, &mut files)
+    }
+
+    let iso = &mmap[..];
+
+    files.par_iter()
+        .for_each(|(path, file)| {
+            let start = file.offset as usize;
+            let end = start + (file.size as usize);
+            let file = &iso[start..end];
+            
+            if let Err(err) = fs::write(path, file) {
+                println!("Path: {}", path.display());
+                println!("Error: {:?}", err);
+                println!();
+            }
+        });
 }
 
 fn main() {
     let args = Args::from_args();
 
     match args {
-        Args::Extract { iso } => todo!(),
-        Args::List { iso } => list(iso),
+        Args::Extract { iso, to } => extract(iso, &to),
+        Args::Tree { iso } => tree(iso),
+        Args::Explain => println!("{}", include_str!("explain.txt"))
     }
 }

@@ -1,0 +1,12 @@
+
+   GCM format
+=================
+The GCM format is the standard gamecube ISO format. It is a raw bit-for-bit dump of the disc, typically provided with a .iso or .gcm file extension.
+
+
+   Non-GCM ISOs
+=================
+Some .iso files are not GCM files. Often times they are "NKIT" files, which aren't supported.
+
+More info can be found here: https://wiki.gbatemp.net/wiki/NKit
+

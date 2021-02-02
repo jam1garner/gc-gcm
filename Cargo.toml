@@ -10,10 +10,12 @@ path = "src/main.rs"
 required-features = ["bin"]
 
 [dependencies]
-binread = "1.4.1"
-thiserror = "1.0.23"
+thiserror = "1"
+binread = "1.4"
 
 structopt = { version = "0.3", optional = true }
+memmap = { version = "0.7", optional = true }
+rayon = { version = "1.5", optional = true }
 
 [features]
-bin = ["structopt"]
+bin = ["structopt", "memmap", "rayon"]
