@@ -127,9 +127,22 @@ pub use error::GcmError;
 pub use dir_listing::*;
 
 impl GcmFile {
+    /// Parse a GcmFile from a reader that implements `io::Read` and `io::Seek`
     pub fn from_reader<R>(reader: &mut R) -> Result<Self, GcmError>
         where R: io::Read + io::Seek,
     {
+        Ok(reader.read_be::<GcmTop>()?.0)
+    }
+}
+
+use std::path::Path;
+
+impl GcmFile {
+    /// Open a file from a given bath as a GcmFile.
+    pub fn open<P>(path: P) -> Result<Self, GcmError>
+        where P: AsRef<Path>,
+    {
+        let mut reader = std::io::BufReader::new(std::fs::File::open(path)?);
         Ok(reader.read_be::<GcmTop>()?.0)
     }
 }
