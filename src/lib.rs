@@ -1,6 +1,54 @@
+//! A library for working with GCM/ISO files (raw bit-for-bit disk images) for the Nintendo
+//! GameCube.
+//!
+//! Features:
+//!
+//! * GCM parser
+//!     * Disk metadata (game_id, internal name, etc.)
+//!     * Offsets to various sections of the GCM
+//! * GameCube filesystem parser
+//!     * Raw access to filesystem structures
+//!     * Iterate over directories in a high-level manner
+//!     * Information about the storage of files, allowing extraction
+//! * DOL executable parser
+//!     * The main executable for the game
+//!     * Allows for extraction or loading into memory
+//!     * Supports parsing extracted DOL files as well
+//!
+//! ```
+//! use gc_gcm::GcmFile;
+//!
+//! let iso = GcmFile::open("melee.iso").unwrap();
+//!
+//! println!("Name of game: {:?}", iso.internal_name);
+//! println!("Size of executable: {:x?}", iso.dol.raw_data.len());
+//! println!(
+//!     "Number of files: {}",
+//!     iso.filesystem.files
+//!         .iter()
+//!         .filter(|entry| matches!(entry, gc_gcm::FsNode::File { .. }))
+//!         .count()
+//! );
+//! ```
+//!
+//! Output:
+//!
+//! ```text
+//! Name of game: "Super Smash Bros Melee"
+//! Size of executable: 4385e0
+//! Number of files: 1209
+//! ```
+
+#![cfg_attr(feature = "no_std", no_std)]
 use binread::{derive_binread, BinRead, BinReaderExt, NullString, io::{self, SeekFrom}};
-use binread::file_ptr::{FilePtr, IntoSeekFrom};
+use binread::file_ptr::{FilePtr, FilePtr32, IntoSeekFrom};
 use core::fmt;
+
+#[cfg(feature = "no_std")]
+mod std;
+
+#[cfg(feature = "no_std")]
+use crate::std::{string::String, vec::Vec};
 
 /// Top-level view of a GCM file
 #[derive(BinRead, Debug)]
@@ -28,10 +76,15 @@ pub struct GcmFile {
     #[br(seek_before = SeekFrom::Start(0x20))]
     #[br(map = NullString::into_string)]
     pub internal_name: String,
-
+    
     // just gonna skip debug stuff
+
     #[br(seek_before = SeekFrom::Start(0x420))]
     pub dol_offset: u32,
+
+    #[br(seek_before = SeekFrom::Start(0x420))]
+    #[br(parse_with = FilePtr32::parse)]
+    pub dol: DolFile,
     
     fs_offset: u32,
     fs_size: u32,
@@ -114,17 +167,19 @@ impl From<U24> for u32 {
 
 impl fmt::Debug for GameId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match std::str::from_utf8(&self.0[..]) {
+        match core::str::from_utf8(&self.0[..]) {
             Ok(id) => fmt::Debug::fmt(id, f),
             Err(_) => write!(f, "GameId({:02x?})", &self.0[..])
         }
     }
 }
 
+mod dol;
 mod error;
 mod dir_listing;
 pub use error::GcmError;
 pub use dir_listing::*;
+pub use dol::*;
 
 impl GcmFile {
     /// Parse a GcmFile from a reader that implements `io::Read` and `io::Seek`
@@ -135,14 +190,16 @@ impl GcmFile {
     }
 }
 
-use std::path::Path;
+#[cfg(not(feature = "no_std"))]
+use ::std::path::Path;
 
+#[cfg(not(feature = "no_std"))]
 impl GcmFile {
     /// Open a file from a given bath as a GcmFile.
     pub fn open<P>(path: P) -> Result<Self, GcmError>
         where P: AsRef<Path>,
     {
-        let mut reader = std::io::BufReader::new(std::fs::File::open(path)?);
+        let mut reader = ::std::io::BufReader::new(::std::fs::File::open(path)?);
         Ok(reader.read_be::<GcmTop>()?.0)
     }
 }

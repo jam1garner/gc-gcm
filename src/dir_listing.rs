@@ -1,6 +1,9 @@
 use core::fmt;
 use crate::{FsNode, FileSystem};
 
+#[cfg(feature = "no_std")]
+use crate::std::vec::Vec;
+
 impl FileSystem {
     /// Iterates over the root of the filesystem
     pub fn iter_root<'a>(&'a self) -> impl Iterator<Item = DirEntry<'a>> + 'a {
@@ -22,10 +25,16 @@ impl FileSystem {
     }
 }
 
+/// An entry representing a directory within the image's filesystem
 #[derive(Clone, Copy)]
 pub struct DirEntry<'a> {
+    /// The `FsNode` of the current directory
     node: &'a FsNode,
+
+    /// A backreference to all the files within the filesystem
     files: &'a [FsNode],
+
+    /// The index of this directory's FsNode
     index: usize,
 }
 
@@ -100,6 +109,8 @@ impl<'a> DirEntry<'a> {
     }
 }
 
+/// A file within the filesystem, representing the range of the data backing within the GCM image
+/// itself
 #[derive(Debug, Clone, Copy)]
 pub struct File {
     pub offset: u32,
