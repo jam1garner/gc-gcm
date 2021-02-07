@@ -75,6 +75,15 @@ fn extract(path: PathBuf, to: &Path, single_thread: bool) {
         extract_entry(entry, to, &mut files)
     }
 
+    if let Err(err) = fs::write(
+        to.join("boot.dol"),
+        &iso.dol.raw_data
+    ) {
+        println!("Path: boot.dol");
+        println!("Error: {:?}", err);
+        println!();
+    };
+
     let iso = &mmap[..];
 
     let extract_file = |(path, file): &(PathBuf, File)| {
