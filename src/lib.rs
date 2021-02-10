@@ -14,6 +14,9 @@
 //!     * The main executable for the game
 //!     * Allows for extraction or loading into memory
 //!     * Supports parsing extracted DOL files as well
+//! * Apploader parser
+//!     * The second stage loader for the game
+//!     * Primarily only useful for hardware accuracy purposes
 //!
 //! ```
 //! use gc_gcm::GcmFile;
@@ -42,6 +45,7 @@
 #![cfg_attr(feature = "no_std", no_std)]
 use binread::{derive_binread, BinRead, BinReaderExt, NullString, io::{self, SeekFrom}};
 use binread::file_ptr::{FilePtr, FilePtr32, IntoSeekFrom};
+use binread::helpers::read_bytes;
 use core::fmt;
 
 #[cfg(feature = "no_std")]
@@ -93,6 +97,44 @@ pub struct GcmFile {
     #[br(seek_before = SeekFrom::Start(fs_offset as u64))]
     #[br(args(fs_offset, fs_size))]
     pub filesystem: FileSystem,
+
+    // raw data
+
+    #[br(seek_before = SeekFrom::Start(0))]
+    #[br(parse_with = read_bytes)]
+    #[br(count = 0x440)]
+    pub boot_bin: Vec<u8>,
+
+    #[br(seek_before = SeekFrom::Start(0x440))]
+    #[br(parse_with = read_bytes)]
+    #[br(count = 0x2000)]
+    pub bi2_bin: Vec<u8>,
+
+    #[br(seek_before = SeekFrom::Start(0x2440))]
+    pub apploader_header: ApploaderHeader,
+
+    #[br(seek_before = SeekFrom::Start(0x2440))]
+    #[br(parse_with = read_bytes)]
+    #[br(count = apploader_header.size + apploader_header.trailer_size + ApploaderHeader::SIZE)]
+    pub apploader: Vec<u8>,
+
+    #[br(seek_before = SeekFrom::Start(fs_offset as u64))]
+    #[br(parse_with = read_bytes)]
+    #[br(count = fs_size)]
+    pub fst_bytes: Vec<u8>,
+}
+
+#[derive(BinRead, Debug)]
+pub struct ApploaderHeader {
+    date: [u8; 0x10],
+    entrypoint_ptr: u32,
+    size: u32,
+    trailer_size: u32,
+    padding: [u8; 4],
+}
+
+impl ApploaderHeader {
+    const SIZE: u32 = 0x20;
 }
 
 /// The parsed GCM filesystem

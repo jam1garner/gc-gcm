@@ -1,6 +1,6 @@
 [package]
 name = "gc-gcm"
-version = "0.9.1"
+version = "0.10.0"
 authors = ["jam1garner <8260240+jam1garner@users.noreply.github.com>"]
 edition = "2018"
 description = "A Rust library and CLI for working with GCM/ISO files (raw bit-for-bit disk images) for the Nintendo GameCube."

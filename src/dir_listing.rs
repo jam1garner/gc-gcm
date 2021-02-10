@@ -23,6 +23,17 @@ impl FileSystem {
 
         entries.into_iter()
     }
+
+    pub fn get_child(&self, child_name: &str) -> Option<DirEntry> {
+        self.iter_root()
+            .find(|entry| {
+                match entry.node {
+                    FsNode::Directory { name, .. } | FsNode::File { name, .. }
+                        if name == child_name => true,
+                    _ => false
+                }
+            })
+    }
 }
 
 /// An entry representing a directory within the image's filesystem
@@ -99,6 +110,17 @@ impl<'a> DirEntry<'a> {
             },
             FsNode::File { .. } => None,
         }
+    }
+
+    pub fn get_child(&self, child_name: &str) -> Option<DirEntry<'a>> {
+        self.iter_dir()?
+            .find(|entry| {
+                match entry.node {
+                    FsNode::Directory { name, .. } | FsNode::File { name, .. }
+                        if name == child_name => true,
+                    _ => false
+                }
+            })
     }
 
     pub fn as_file(&self) -> Option<File> {
